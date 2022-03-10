@@ -85,23 +85,14 @@ class GradientInformation(botorch.acquisition.AnalyticAcquisitionFunction):
                 K_Xθ.shape[-1]
             ).to(theta)
 
-            # Get Cholesky factor.
-            L = one_step_cholesky(
-                top_left=self.model.get_L_lower().transpose(-1, -2),
-                K_Xθ=K_Xθ,
-                K_θθ=K_θθ,
-                A_inv=self.model.get_KXX_inv(),
-            )
-
-            # Get K_XX_inv.
-            K_XX_inv = torch.cholesky_inverse(L, upper=True)
-
             # get K_xX_dx
             K_xθ_dx = self._get_KxX_dx(x, theta)
             K_xX_dx = torch.cat([self.K_xX_dx_part, K_xθ_dx], dim=-1)
 
-            # Compute_variance.
-            variance_d = -K_xX_dx @ K_XX_inv @ K_xX_dx.transpose(1, 2)
+            K_orig = self.model.prediction_strategy.lik_train_train_covar
+            K_new = K_orig.cat_rows(K_Xθ.transpose(-1, -2), K_θθ)
+            variance_d = -K_new.inv_matmul(K_xX_dx.transpose(1, 2), K_xX_dx)
+
             variances.append(torch.trace(variance_d.view(D, D)).view(1))
 
         return -torch.cat(variances, dim=0)
